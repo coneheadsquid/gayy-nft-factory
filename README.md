@@ -19,7 +19,7 @@ gayy-nft-factory is a user-friendly desktop application that lets you create uni
 1. Open Command Prompt (Windows) or Terminal (Mac/Linux)
 2. Navigate to the project folder:
    ```bash
-   cd path/to/artlayer_fusion
+   cd path/to/gayy-nft-factory
    ```
 3. Install required packages:
    ```bash
