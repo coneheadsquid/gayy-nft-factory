@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                              QListWidgetItem, QPushButton, QLabel, QMessageBox,
-                             QInputDialog, QSlider, QTabWidget)
+                             QInputDialog, QSlider, QTabWidget, QScrollArea,
+                             QSpinBox)
 from PyQt6.QtCore import pyqtSignal, Qt
 
 
@@ -16,7 +17,7 @@ class RarityPanel(QWidget):
         layout = QVBoxLayout(self)
 
         # Title
-        title = QLabel("Layer Settings - Rarity & Opacity")
+        title = QLabel("Layer Settings - Rarity, Opacity & Stacking")
         title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px; color: #f0f0f0;")
         layout.addWidget(title)
 
@@ -25,9 +26,9 @@ class RarityPanel(QWidget):
         layout.addWidget(self.tab_widget)
 
         # Info label
-        self.info_label = QLabel("Configure rarity weights and opacity for each artist's layers.")
+        self.info_label = QLabel("Configure rarity weights, opacity, and stacking order for each artist's layers.")
         self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet("padding: 5px; background: #2d2d2d; color: #f0f0f0; border-radius: 5px;")
+        self.info_label.setStyleSheet("padding: 10px; background: #2d2d2d; color: #f0f0f0; border-radius: 5px;")
         layout.addWidget(self.info_label)
 
         self.refresh_artists()
@@ -50,7 +51,8 @@ class RarityPanel(QWidget):
                 self.info_label.setText("Artists added but no layers uploaded. Add layers to configure settings.")
                 return
 
-            self.info_label.setText(f"Configure settings for {len(artists)} artists. Higher rarity = more common.")
+            self.info_label.setText(
+                f"Configure settings for {len(artists)} artists. Higher rarity = more common. Lower layer index = rendered first.")
 
             for artist_name in artists:
                 layer_count = self.project_manager.get_artist_layer_count(artist_name)
@@ -61,34 +63,27 @@ class RarityPanel(QWidget):
 
     def create_artist_tab(self, artist_name):
         tab = QWidget()
-        layout = QHBoxLayout(tab)
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(2)
 
         artist = self.project_manager.get_artist(artist_name)
         if not artist or not artist['layers']:
             no_layers_label = QLabel(f"No layers added for {artist_name} yet.")
-            no_layers_label.setStyleSheet("color: #f0f0f0; padding: 5px;")
+            no_layers_label.setStyleSheet("color: #f0f0f0; padding: 10px;")
             layout.addWidget(no_layers_label)
             return tab
 
-        # # Add instructions
-        # instructions = QLabel(f"Configure {artist_name}'s layers:")
-        #
-        # instructions.setStyleSheet("""
-        #       padding: 2px 5px;
-        #       color: #cccccc;
-        #       font-weight: bold;
-        #       font-size: 12px;
-        #       margin: 0;
-        #       margin-bottom: 2px;
-        #   """)
-        # layout.addWidget(instructions)
-        # layout.addWidget(instructions)
+        # Add instructions
+        instructions = QLabel(f"Configure {artist_name}'s layers:")
+        instructions.setStyleSheet(
+            "padding: 2px 5px; color: #cccccc; font-weight: bold; font-size: 12px; margin: 0; margin-bottom: 2px;")
+        layout.addWidget(instructions)
 
         # Create scroll area for many layers
-        from PyQt6.QtWidgets import QScrollArea
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(2)
 
         for layer in artist['layers']:
             layer_widget = self.create_layer_settings_widget(artist_name, layer)
@@ -98,14 +93,14 @@ class RarityPanel(QWidget):
         scroll_area.setWidget(scroll_widget)
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        #scroll_area.setMaximumHeight(200)
+        scroll_area.setMaximumHeight(800)
 
         layout.addWidget(scroll_area)
         return tab
 
     def create_layer_settings_widget(self, artist_name, layer):
         widget = QWidget()
-        widget.setStyleSheet("QWidget { background: #333333; padding: 5px; border-radius: 6px; margin: 4px; }")
+        widget.setStyleSheet("QWidget { background: #333333; padding: 12px; border-radius: 6px; margin: 4px; }")
         layout = QVBoxLayout(widget)
 
         # Layer name header
@@ -189,8 +184,45 @@ class RarityPanel(QWidget):
         opacity_layout.addWidget(opacity_value_label)
         layout.addLayout(opacity_layout)
 
+        # Layer Index (z-index) controls
+        index_layout = QHBoxLayout()
+        index_label = QLabel("Stack Order:")
+        index_label.setStyleSheet("color: #cccccc; min-width: 60px;")
+        index_layout.addWidget(index_label)
+
+        # Layer index spin box
+        index_spin = QSpinBox()
+        index_spin.setRange(1, 20)  # Reasonable range for layers
+        index_spin.setValue(int(layer.get('layer_index', 1)))
+        index_spin.valueChanged.connect(
+            lambda value: self.on_layer_index_changed(artist_name, layer['file_name'], value))
+        index_spin.setStyleSheet("""
+            QSpinBox {
+                background: #444444;
+                color: #f0f0f0;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 2px;
+                min-width: 50px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background: #555555;
+                border: 1px solid #666666;
+                width: 15px;
+            }
+        """)
+
+        index_help = QLabel("(Lower = rendered first)")
+        index_help.setStyleSheet("color: #888888; font-size: 10px;")
+
+        index_layout.addWidget(index_spin)
+        index_layout.addWidget(index_help)
+        index_layout.addStretch()
+        layout.addLayout(index_layout)
+
         # Help text
-        help_text = QLabel("Rarity: 1-10 (higher = more common) | Opacity: 0.0-1.0 (transparency)")
+        help_text = QLabel(
+            "Rarity: 1-10 (higher = more common) | Opacity: 0.0-1.0 | Stack Order: 1-20 (lower = behind)")
         help_text.setStyleSheet("color: #888888; font-size: 10px; margin-top: 4px;")
         layout.addWidget(help_text)
 
@@ -202,4 +234,8 @@ class RarityPanel(QWidget):
 
     def on_opacity_changed(self, artist_name, layer_name, opacity):
         if self.project_manager.set_layer_opacity(artist_name, layer_name, opacity):
+            self.rarity_changed.emit()
+
+    def on_layer_index_changed(self, artist_name, layer_name, layer_index):
+        if self.project_manager.set_layer_index(artist_name, layer_name, layer_index):
             self.rarity_changed.emit()

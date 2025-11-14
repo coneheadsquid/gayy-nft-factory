@@ -11,6 +11,7 @@ gayy-nft-factory is a powerful desktop application that enables artists to colla
 - **🎲 Automatic Combination Generation**: Creates unique NFTs from artist layers
 - **⚡ Rarity System**: Control how common or rare each layer appears
 - **🌊 Opacity Controls**: Adjust layer transparency for artistic effects
+- **📐 Layer Stacking**: Control rendering order with layer indexes
 - **📱 Real-time Preview**: See NFT combinations before generating
 - **🖼️ Gallery View**: Browse all generated NFTs with metadata
 - **💾 Project Persistence**: Save and resume your work anytime
@@ -66,7 +67,8 @@ gayy-nft-factory is a powerful desktop application that enables artists to colla
 4. **Configure Layer Settings**
    - **Rarity**: 1-10 scale (higher = more common)
    - **Opacity**: 0.0-1.0 scale (0.0 = transparent, 1.0 = fully opaque)
-   - Adjust sliders in the "Layer Settings" panel
+   - **Stack Order**: 1-20 scale (lower = rendered first/behind)
+   - Adjust controls in the "Layer Settings" panel
 
 5. **Generate NFTs**
    - **Generate Single**: Test with one NFT
@@ -112,6 +114,18 @@ your_project/
 - Adjust layer transparency for artistic effects
 - Perfect for creating overlay effects, glows, and subtle textures
 
+### Stacking Order (Layer Index)
+- **Layer Index**: 1-20 scale (lower = rendered first/behind, higher = rendered last/in front)
+- Controls the stacking order of layers in the final NFT
+- Layers are automatically sorted by index before composition
+- Example: Background layers should have lower indexes (1-3), foreground elements higher indexes (4-6)
+
+### Complete Layer Settings
+Each layer now has three controls:
+- **Rarity**: How often the layer appears (1-10)
+- **Opacity**: Layer transparency (0.0-1.0)  
+- **Stack Order**: Rendering order (1-20)
+
 ### Metadata Structure
 ```json
 {
@@ -121,11 +135,21 @@ your_project/
   "attributes": [
     {
       "trait_type": "Background Artist",
-      "value": "Cosmic Nebula"
-      },
+      "value": "Cosmic Nebula",
+      "opacity": 1.0,
+      "layer_index": 1
+    },
     {
       "trait_type": "Character Artist", 
-      "value": "Cyber Warrior"
+      "value": "Cyber Warrior",
+      "opacity": 0.8,
+      "layer_index": 3
+    },
+    {
+      "trait_type": "Effects Artist",
+      "value": "Magic Glow",
+      "opacity": 0.6,
+      "layer_index": 5
     }
   ]
 }
@@ -138,6 +162,7 @@ your_project/
 - Maintain consistent art styles within layers
 - Use high-quality source images (2000x2000px recommended)
 - Name files clearly for easy identification
+- Consider stacking order when designing layers
 
 ### For Project Managers
 - Start with 2-3 artists for testing
@@ -145,12 +170,21 @@ your_project/
 - Test combinations with small batches first
 - Use rarity settings to create common and rare traits
 - Experiment with opacity for unique visual effects
+- Plan layer stacking order for optimal composition
 
 ### Example Collection
-- **Background Artist**: 5 environment layers
-- **Character Artist**: 4 character designs  
-- **Effects Artist**: 3 overlay layers with varying opacity
-- **Total Combinations**: 5 × 4 × 3 = **60 unique NFTs**
+- **Background Artist**: 5 environment layers (Layer Index: 1-2)
+- **Character Artist**: 4 character designs (Layer Index: 3-4)  
+- **Accessory Artist**: 3 item layers (Layer Index: 5-6)
+- **Effects Artist**: 2 overlay layers with varying opacity (Layer Index: 7-8)
+- **Total Combinations**: 5 × 4 × 3 × 2 = **120 unique NFTs**
+
+### Example Stacking Strategy
+- **Backgrounds**: Layer Index 1-2
+- **Base Characters**: Layer Index 3-4
+- **Clothing/Armor**: Layer Index 5-6
+- **Accessories**: Layer Index 7-8
+- **Effects/Overlays**: Layer Index 9-10
 
 ## 🔧 Troubleshooting
 
@@ -176,11 +210,17 @@ your_project/
 - Verify image files are valid PNGs
 - Try generating a single NFT first
 
+**Layers stacking incorrectly:**
+- Check layer index settings for each artist
+- Lower numbers render first (behind other layers)
+- Higher numbers render last (in front of other layers)
+
 ### Getting Help
 1. Check the console for error messages
 2. Verify all installation steps were followed
 3. Test with simple PNG files first
 4. Create a new project if issues persist
+5. Review layer index settings if stacking order is wrong
 
 ## 📊 Understanding Statistics
 
@@ -197,19 +237,26 @@ your_project/
 - **Glow Effects**: Create light effects with high opacity (0.7-0.9)
 - **Layering**: Combine multiple transparent layers for complex effects
 
+### Stacking Order Strategies
+- **Background First**: Set backgrounds to lowest indexes (1-2)
+- **Character Middle**: Place main characters in middle range (3-5)
+- **Accessories Forward**: Put hats, glasses, etc. at higher indexes (6-8)
+- **Effects on Top**: Reserve highest indexes for overlays and effects (9-10+)
+
 ### Rarity Strategies
 - **Common Traits**: Set rarity 8-10 for base layers
 - **Uncommon Traits**: Set rarity 4-7 for interesting variations  
 - **Rare Traits**: Set rarity 1-3 for special, sought-after layers
-- **Legendary**: Combine low rarity with unique opacity effects
+- **Legendary**: Combine low rarity with unique opacity and stacking effects
 
 ## 🎉 What's Next?
 
 After generating your collection:
 1. Review all NFTs in the Gallery tab
-2. Copy metadata for each NFT as needed
-3. Use the numbered files for minting on platforms like Solana
-4. Share your unique multi-artist creations!
+2. Check layer stacking in the preview
+3. Copy metadata for each NFT as needed
+4. Use the numbered files for minting on platforms like Solana
+5. Share your unique multi-artist creations!
 
 ---
 

@@ -14,6 +14,7 @@ class ProjectManager:
         self.project_data = {
             'project_info': {},
             'artists': {},
+            'artist_order': [],  # Track the order artists are added
             'generation_settings': {},
             'generation_state': {}
         }
@@ -31,6 +32,7 @@ class ProjectManager:
                 'last_modified': datetime.now().isoformat()
             },
             'artists': {},
+            'artist_order': [],  # Track the order artists are added
             'generation_settings': {
                 'auto_generate': True,
                 'max_attempts': 1000,
@@ -95,8 +97,12 @@ class ProjectManager:
             'name': artist_name,
             'display_name': artist_name,
             'layers': [],
-            'rarity_weights': {}  # Store rarity for each layer
+            'rarity_weights': {},
+            'layer_index': len(self.project_data['artist_order']) + 1  # Auto-assign layer index
         }
+
+        # Add to artist order
+        self.project_data['artist_order'].append(artist_name)
 
         # Create artist directory
         artist_dir = os.path.join(self.project_path, 'assets', 'artists', artist_name)
@@ -109,6 +115,17 @@ class ProjectManager:
             return False
 
         if artist_name in self.project_data['artists']:
+            # Remove from artist order
+            if artist_name in self.project_data['artist_order']:
+                self.project_data['artist_order'].remove(artist_name)
+
+            # Update layer indexes for remaining artists
+            for i, remaining_artist in enumerate(self.project_data['artist_order']):
+                self.project_data['artists'][remaining_artist]['layer_index'] = i + 1
+                # Update all layers for this artist
+                for layer in self.project_data['artists'][remaining_artist]['layers']:
+                    layer['layer_index'] = i + 1
+
             del self.project_data['artists'][artist_name]
 
             # Remove artist directory
@@ -143,13 +160,17 @@ class ProjectManager:
 
             shutil.copy2(source_file_path, dest_path)
 
+            # Get the artist's layer index for default
+            artist_index = self.project_data['artists'][artist_name].get('layer_index', 1)
+
             # Add to project data with default settings
             layer_data = {
                 'file_name': file_name,
                 'display_name': os.path.splitext(file_name)[0].replace('_', ' ').title(),
                 'file_path': dest_path,
                 'rarity_weight': 1.0,  # Default rarity
-                'opacity': 1.0  # Default opacity (fully opaque)
+                'opacity': 1.0,  # Default opacity (fully opaque)
+                'layer_index': artist_index  # Use artist's layer index as default
             }
 
             self.project_data['artists'][artist_name]['layers'].append(layer_data)
@@ -182,6 +203,16 @@ class ProjectManager:
             return self.save_project()
         return False
 
+    def set_layer_index(self, artist_name, layer_name, layer_index):
+        """Set layer index (z-index) for a specific layer - override the default"""
+        if artist_name in self.project_data['artists']:
+            # Update the layer data
+            for layer in self.project_data['artists'][artist_name]['layers']:
+                if layer['file_name'] == layer_name:
+                    layer['layer_index'] = layer_index
+            return self.save_project()
+        return False
+
     def get_layer_opacity(self, artist_name, layer_name):
         """Get opacity for a specific layer"""
         artist = self.get_artist(artist_name)
@@ -190,6 +221,34 @@ class ProjectManager:
                 if layer['file_name'] == layer_name:
                     return layer.get('opacity', 1.0)
         return 1.0
+
+    def get_layer_index(self, artist_name, layer_name):
+        """Get layer index for a specific layer"""
+        artist = self.get_artist(artist_name)
+        if artist:
+            for layer in artist['layers']:
+                if layer['file_name'] == layer_name:
+                    return layer.get('layer_index', 1)
+        return 1
+
+    def get_artist_layer_index(self, artist_name):
+        """Get the default layer index for an artist"""
+        artist = self.get_artist(artist_name)
+        if artist:
+            return artist.get('layer_index', 1)
+        return 1
+
+    def set_artist_layer_index(self, artist_name, layer_index):
+        """Set the default layer index for an artist and update all their layers"""
+        if artist_name in self.project_data['artists']:
+            self.project_data['artists'][artist_name]['layer_index'] = layer_index
+
+            # Update all layers for this artist
+            for layer in self.project_data['artists'][artist_name]['layers']:
+                layer['layer_index'] = layer_index
+
+            return self.save_project()
+        return False
 
     def get_artists(self):
         return list(self.project_data['artists'].keys())
@@ -226,12 +285,13 @@ class ProjectManager:
                 weights = [layer.get('rarity_weight', 1.0) for layer in layers]
                 selected_layer = random.choices(layers, weights=weights)[0]
 
-                # Include opacity in the combination
+                # Include all settings in the combination
                 combination[artist_name] = {
                     'file_name': selected_layer['file_name'],
                     'display_name': selected_layer['display_name'],
                     'file_path': selected_layer['file_path'],
-                    'opacity': selected_layer.get('opacity', 1.0)
+                    'opacity': selected_layer.get('opacity', 1.0),
+                    'layer_index': selected_layer.get('layer_index', 1)  # Include layer index
                 }
                 combination_key_parts.append(f"{artist_name}:{selected_layer['file_name']}")
 
@@ -314,18 +374,19 @@ class ProjectManager:
 
             # Convert combination to layer composition format
             layer_composition = []
-            z_index = 1
             for artist_name, layer_data in combination.items():
                 layer_composition.append({
                     'artist': artist_name,
                     'layer_name': layer_data['file_name'],
                     'display_name': layer_data['display_name'],
                     'file_path': layer_data['file_path'],
-                    'z_index': z_index,
+                    'z_index': layer_data.get('layer_index', 1),  # Use layer index for z-index
                     'blend_mode': 'normal',
-                    'opacity': layer_data.get('opacity', 1.0)  # Use stored opacity
+                    'opacity': layer_data.get('opacity', 1.0)
                 })
-                z_index += 1
+
+            # Sort by layer index (z-index) - lower numbers rendered first
+            layer_composition.sort(key=lambda x: x['z_index'])
 
             # Generate image
             print(f"Generating NFT #{edition} with {len(layer_composition)} layers...")
@@ -410,7 +471,6 @@ class ProjectManager:
 
             # Convert combination to layer composition format
             layer_composition = []
-            z_index = 1
             for artist_name, layer_data in combination.items():
                 # Check if file exists before adding to composition
                 if os.path.exists(layer_data['file_path']):
@@ -419,17 +479,17 @@ class ProjectManager:
                         'layer_name': layer_data['file_name'],
                         'display_name': layer_data['display_name'],
                         'file_path': layer_data['file_path'],
-                        'z_index': z_index,
+                        'z_index': layer_data.get('layer_index', 1),  # Use layer index for z-index
                         'blend_mode': 'normal',
-                        'opacity': layer_data.get('opacity', 1.0)  # Use stored opacity
+                        'opacity': layer_data.get('opacity', 1.0)
                     })
-                    z_index += 1
-                else:
-                    print(f"Warning: Layer file not found: {layer_data['file_path']}")
 
             if not layer_composition:
                 print("No valid layers found for preview")
                 return None
+
+            # Sort by layer index (z-index) - lower numbers rendered first
+            layer_composition.sort(key=lambda x: x['z_index'])
 
             # Compose image
             result_image = compose_layers(layer_composition)
@@ -567,6 +627,7 @@ class ProjectManager:
                 'display_name': layer['display_name'],
                 'rarity_weight': layer.get('rarity_weight', 1.0),
                 'opacity': layer.get('opacity', 1.0),
+                'layer_index': layer.get('layer_index', 1),
                 'file_path': layer['file_path'],
                 'file_exists': os.path.exists(layer['file_path'])
             })
