@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
             """)
 
     def init_ui(self):
-        self.setWindowTitle("ArtLayer Fusion - Auto Combination Generator")
+        self.setWindowTitle("gayy nft factory - Artists collab NFT generator ")
         self.setGeometry(100, 100, 1400, 800)
 
         # Create tab widget for different views
