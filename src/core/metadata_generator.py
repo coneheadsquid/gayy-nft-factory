@@ -6,10 +6,11 @@ class MetadataGenerator:
     def generate_metadata(edition_number, layer_composition, project_info):
         attributes = []
 
-        for i, layer in enumerate(layer_composition, 1):
+        for layer in layer_composition:
             attributes.append({
-                "trait_type": f"Layer {i}",
-                "value": layer['display_name']
+                "trait_type": layer['artist'],  # Use artist name as trait_type
+                "value": layer['display_name'],
+                "opacity": layer.get('opacity', 1.0)  # Include opacity in metadata
             })
 
         return {
