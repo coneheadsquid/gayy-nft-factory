@@ -6,7 +6,7 @@ from src.ui.main_window import MainWindow
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("ArtLayer Fusion")
+    app.setApplicationName("gayy-nft-factory")
     app.setApplicationVersion("1.0.0")
 
     # Create main window
