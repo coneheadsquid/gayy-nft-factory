@@ -143,12 +143,13 @@ class ProjectManager:
 
             shutil.copy2(source_file_path, dest_path)
 
-            # Add to project data with default rarity
+            # Add to project data with default settings
             layer_data = {
                 'file_name': file_name,
                 'display_name': os.path.splitext(file_name)[0].replace('_', ' ').title(),
                 'file_path': dest_path,
-                'rarity_weight': 1.0  # Default rarity
+                'rarity_weight': 1.0,  # Default rarity
+                'opacity': 1.0  # Default opacity (fully opaque)
             }
 
             self.project_data['artists'][artist_name]['layers'].append(layer_data)
@@ -170,6 +171,25 @@ class ProjectManager:
                     layer['rarity_weight'] = rarity_weight
             return self.save_project()
         return False
+
+    def set_layer_opacity(self, artist_name, layer_name, opacity):
+        """Set opacity for a specific layer"""
+        if artist_name in self.project_data['artists']:
+            # Update the layer data
+            for layer in self.project_data['artists'][artist_name]['layers']:
+                if layer['file_name'] == layer_name:
+                    layer['opacity'] = opacity
+            return self.save_project()
+        return False
+
+    def get_layer_opacity(self, artist_name, layer_name):
+        """Get opacity for a specific layer"""
+        artist = self.get_artist(artist_name)
+        if artist:
+            for layer in artist['layers']:
+                if layer['file_name'] == layer_name:
+                    return layer.get('opacity', 1.0)
+        return 1.0
 
     def get_artists(self):
         return list(self.project_data['artists'].keys())
@@ -206,7 +226,13 @@ class ProjectManager:
                 weights = [layer.get('rarity_weight', 1.0) for layer in layers]
                 selected_layer = random.choices(layers, weights=weights)[0]
 
-                combination[artist_name] = selected_layer
+                # Include opacity in the combination
+                combination[artist_name] = {
+                    'file_name': selected_layer['file_name'],
+                    'display_name': selected_layer['display_name'],
+                    'file_path': selected_layer['file_path'],
+                    'opacity': selected_layer.get('opacity', 1.0)
+                }
                 combination_key_parts.append(f"{artist_name}:{selected_layer['file_name']}")
 
         combination_key = "|".join(sorted(combination_key_parts))
@@ -297,7 +323,7 @@ class ProjectManager:
                     'file_path': layer_data['file_path'],
                     'z_index': z_index,
                     'blend_mode': 'normal',
-                    'opacity': 1.0
+                    'opacity': layer_data.get('opacity', 1.0)  # Use stored opacity
                 })
                 z_index += 1
 
@@ -395,7 +421,7 @@ class ProjectManager:
                         'file_path': layer_data['file_path'],
                         'z_index': z_index,
                         'blend_mode': 'normal',
-                        'opacity': 1.0
+                        'opacity': layer_data.get('opacity', 1.0)  # Use stored opacity
                     })
                     z_index += 1
                 else:
@@ -527,3 +553,22 @@ class ProjectManager:
             print(f"Corrupted files: {corrupted_files}")
 
         return len(missing_files) == 0 and len(corrupted_files) == 0
+
+    def get_artist_layer_info(self, artist_name):
+        """Get detailed information about an artist's layers"""
+        artist = self.get_artist(artist_name)
+        if not artist:
+            return []
+
+        layer_info = []
+        for layer in artist['layers']:
+            layer_info.append({
+                'file_name': layer['file_name'],
+                'display_name': layer['display_name'],
+                'rarity_weight': layer.get('rarity_weight', 1.0),
+                'opacity': layer.get('opacity', 1.0),
+                'file_path': layer['file_path'],
+                'file_exists': os.path.exists(layer['file_path'])
+            })
+
+        return layer_info

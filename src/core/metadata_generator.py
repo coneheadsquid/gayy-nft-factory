@@ -9,8 +9,7 @@ class MetadataGenerator:
         for layer in layer_composition:
             attributes.append({
                 "trait_type": layer['artist'],  # Use artist name as trait_type
-                "value": layer['display_name'],
-                "opacity": layer.get('opacity', 1.0)  # Include opacity in metadata
+                "value": layer['display_name']
             })
 
         return {
