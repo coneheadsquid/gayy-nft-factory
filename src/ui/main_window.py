@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
                              QFileDialog, QTextEdit, QInputDialog, QProgressDialog,
                              QTabWidget, QApplication)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QPalette, QColor
+from PyQt6.QtGui import QPixmap, QPalette, QColor, QMovie  # ADD QMovie import
 from ..core.project_manager import ProjectManager
 from .artist_panel import ArtistPanel
 from .rarity_panel import RarityPanel
@@ -16,7 +16,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.project_manager = ProjectManager()
-        self.apply_dark_theme()  # Apply dark theme
+        self.current_preview_movie = None  # Track current preview GIF
+        self.apply_dark_theme()
         self.init_ui()
 
     def apply_dark_theme(self):
@@ -370,25 +371,45 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Layers", "Please add layers to artists before generating preview!")
             return
 
+        # Stop any currently playing preview GIF
+        if self.current_preview_movie:
+            self.current_preview_movie.stop()
+            self.current_preview_movie = None
+
         combination, combination_key = self.project_manager.generate_random_combination()
         if combination:
             preview_path = self.project_manager.generate_preview_for_combination(combination)
             if preview_path and os.path.exists(preview_path):
-                pixmap = QPixmap(preview_path)
-                if not pixmap.isNull():
-                    scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
-                                                  Qt.TransformationMode.SmoothTransformation)
-                    self.preview_label.setPixmap(scaled_pixmap)
-                    self.preview_label.setText("")  # Clear text when image is shown
+                if preview_path.lower().endswith('.gif'):
+                    # Handle GIF preview with animation
+                    self.current_preview_movie = QMovie(preview_path)
+                    self.current_preview_movie.setScaledSize(self.preview_label.size())
+                    self.preview_label.setMovie(self.current_preview_movie)
+                    self.current_preview_movie.start()
+                    self.preview_label.setText("")  # Clear text
+                else:
+                    # Handle PNG preview
+                    pixmap = QPixmap(preview_path)
+                    if not pixmap.isNull():
+                        scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
+                                                      Qt.TransformationMode.SmoothTransformation)
+                        self.preview_label.setPixmap(scaled_pixmap)
+                        self.preview_label.setText("")  # Clear text when image is shown
 
-                    # Show combination info
-                    combo_text = "Preview Combination:\n"
-                    for artist, layer in combination.items():
-                        combo_text += f"• {artist}: {layer['display_name']}\n"
-                    self.preview_label.setToolTip(combo_text)
+            # Show combination info
+            combo_text = "Preview Combination:\n"
+            for artist, layer in combination.items():
+                file_type = "GIF" if layer['file_path'].lower().endswith('.gif') else "PNG"
+                combo_text += f"• {artist}: {layer['display_name']} ({file_type})\n"
+            self.preview_label.setToolTip(combo_text)
 
     def clear_preview(self):
         """Clear the preview area"""
+        # Stop any currently playing preview GIF
+        if self.current_preview_movie:
+            self.current_preview_movie.stop()
+            self.current_preview_movie = None
+
         self.preview_label.clear()
         self.preview_label.setText("Preview will appear here")
         self.preview_label.setToolTip("")
@@ -414,12 +435,26 @@ class MainWindow(QMainWindow):
                 latest_nft = nfts[-1]
                 image_path = latest_nft['image_path']
                 if os.path.exists(image_path):
-                    pixmap = QPixmap(image_path)
-                    if not pixmap.isNull():
-                        scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
-                                                      Qt.TransformationMode.SmoothTransformation)
-                        self.preview_label.setPixmap(scaled_pixmap)
-                        self.preview_label.setText("")  # Clear text when image is shown
+                    # Stop any currently playing preview GIF
+                    if self.current_preview_movie:
+                        self.current_preview_movie.stop()
+                        self.current_preview_movie = None
+
+                    if image_path.lower().endswith('.gif'):
+                        # Show animated GIF
+                        self.current_preview_movie = QMovie(image_path)
+                        self.current_preview_movie.setScaledSize(self.preview_label.size())
+                        self.preview_label.setMovie(self.current_preview_movie)
+                        self.current_preview_movie.start()
+                        self.preview_label.setText("")
+                    else:
+                        # Show static PNG
+                        pixmap = QPixmap(image_path)
+                        if not pixmap.isNull():
+                            scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
+                                                          Qt.TransformationMode.SmoothTransformation)
+                            self.preview_label.setPixmap(scaled_pixmap)
+                            self.preview_label.setText("")
 
             # Update metadata display
             metadata = self.project_manager.get_latest_metadata()
@@ -556,3 +591,9 @@ class MainWindow(QMainWindow):
         """When NFT is selected in gallery, update metadata display"""
         if nft_data and 'metadata' in nft_data:
             self.metadata_display.setPlainText(json.dumps(nft_data['metadata'], indent=2))
+
+    def resizeEvent(self, event):
+        """Handle resize events to adjust GIF size"""
+        super().resizeEvent(event)
+        if self.current_preview_movie:
+            self.current_preview_movie.setScaledSize(self.preview_label.size())

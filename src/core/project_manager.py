@@ -4,7 +4,7 @@ import shutil
 import random
 from datetime import datetime
 from ..utils.file_utils import ensure_directory
-from ..utils.image_utils import compose_layers, resize_image_to_2000x2000
+from ..utils.image_utils import compose_layers, resize_image_to_2000x2000, get_gif_frame_count
 from .metadata_generator import MetadataGenerator
 
 
@@ -122,7 +122,7 @@ class ProjectManager:
             # Update layer indexes for remaining artists
             for i, remaining_artist in enumerate(self.project_data['artist_order']):
                 self.project_data['artists'][remaining_artist]['layer_index'] = i + 1
-                # Update all layers for this artist
+                # Update all layers for this artist - THIS LINE WAS MISSING PROPER INDENTATION
                 for layer in self.project_data['artists'][remaining_artist]['layers']:
                     layer['layer_index'] = i + 1
 
@@ -322,6 +322,22 @@ class ProjectManager:
                     combination_key = line.split('|')[0]
                     self.generated_combinations.add(combination_key)
 
+    def is_gif_combination(self, combination):
+        """Check if combination contains any GIF layers"""
+        for layer_data in combination.values():
+            if layer_data['file_path'].lower().endswith('.gif'):
+                return True
+        return False
+
+    def get_max_gif_frames(self, combination):
+        """Get maximum number of frames from all GIFs in combination"""
+        max_frames = 1
+        for layer_data in combination.values():
+            if layer_data['file_path'].lower().endswith('.gif'):
+                frame_count = get_gif_frame_count(layer_data['file_path'])
+                max_frames = max(max_frames, frame_count)
+        return max_frames
+
     def generate_single_nft(self):
         if not self.project_path:
             return False
@@ -367,7 +383,7 @@ class ProjectManager:
                 return False
 
             # Generate NFT files
-            nft_path = os.path.join(self.project_path, 'workspace', 'generated', f'{edition}.png')
+            nft_path = os.path.join(self.project_path, 'workspace', 'generated', f'{edition}')
             metadata_path = os.path.join(self.project_path, 'workspace', 'generated', f'{edition}.json')
 
             ensure_directory(os.path.dirname(nft_path))
@@ -388,11 +404,29 @@ class ProjectManager:
             # Sort by layer index (z-index) - lower numbers rendered first
             layer_composition.sort(key=lambda x: x['z_index'])
 
-            # Generate image
+            # Generate image or GIF
             print(f"Generating NFT #{edition} with {len(layer_composition)} layers...")
-            nft_image = compose_layers(layer_composition)
-            nft_image.save(nft_path, 'PNG')
-            print(f"Successfully saved NFT image to {nft_path}")
+
+            result = compose_layers(layer_composition)
+
+            if isinstance(result, tuple):  # GIF result (frames, durations)
+                frames, durations = result
+                # Save as GIF
+                nft_path += '.gif'
+                frames[0].save(
+                    nft_path,
+                    format='GIF',
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=0,
+                    optimize=True
+                )
+                print(f"Successfully saved GIF NFT to {nft_path}")
+            else:  # Static image
+                nft_path += '.png'
+                result.save(nft_path, 'PNG')
+                print(f"Successfully saved static NFT to {nft_path}")
 
             # Generate metadata
             metadata = MetadataGenerator.generate_metadata(
@@ -466,7 +500,7 @@ class ProjectManager:
             return None
 
         try:
-            preview_path = os.path.join(self.project_path, 'workspace', 'previews', 'combination_preview.png')
+            preview_path = os.path.join(self.project_path, 'workspace', 'previews', 'combination_preview')
             ensure_directory(os.path.dirname(preview_path))
 
             # Convert combination to layer composition format
@@ -492,8 +526,23 @@ class ProjectManager:
             layer_composition.sort(key=lambda x: x['z_index'])
 
             # Compose image
-            result_image = compose_layers(layer_composition)
-            result_image.save(preview_path, 'PNG')
+            result = compose_layers(layer_composition)
+
+            if isinstance(result, tuple):  # GIF result
+                frames, durations = result
+                preview_path += '.gif'
+                frames[0].save(
+                    preview_path,
+                    format='GIF',
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=0,
+                    optimize=True
+                )
+            else:  # Static image
+                preview_path += '.png'
+                result.save(preview_path, 'PNG')
 
             return preview_path
         except Exception as e:
@@ -512,9 +561,9 @@ class ProjectManager:
             return []
 
         nfts = []
-        # Get all PNG files
+        # Get all PNG and GIF files
         for file_name in os.listdir(generated_dir):
-            if file_name.endswith('.png'):
+            if file_name.endswith('.png') or file_name.endswith('.gif'):
                 edition = file_name.split('.')[0]
                 metadata_path = os.path.join(generated_dir, f"{edition}.json")
                 image_path = os.path.join(generated_dir, file_name)
@@ -538,8 +587,15 @@ class ProjectManager:
     def get_latest_preview(self):
         if not self.project_path:
             return None
-        preview_path = os.path.join(self.project_path, 'workspace', 'previews', 'current_preview.png')
-        return preview_path if os.path.exists(preview_path) else None
+        preview_path_png = os.path.join(self.project_path, 'workspace', 'previews', 'current_preview.png')
+        preview_path_gif = os.path.join(self.project_path, 'workspace', 'previews', 'current_preview.gif')
+
+        if os.path.exists(preview_path_gif):
+            return preview_path_gif
+        elif os.path.exists(preview_path_png):
+            return preview_path_png
+        else:
+            return None
 
     def get_latest_metadata(self):
         if not self.project_path:
@@ -568,7 +624,7 @@ class ProjectManager:
             for artist_name, artist_data in self.project_data['artists'].items():
                 for layer in artist_data['layers']:
                     file_path = layer['file_path']
-                    if os.path.exists(file_path):
+                    if os.path.exists(file_path) and not file_path.lower().endswith('.gif'):
                         try:
                             with Image.open(file_path) as img:
                                 if img.size != (2000, 2000):
@@ -629,7 +685,8 @@ class ProjectManager:
                 'opacity': layer.get('opacity', 1.0),
                 'layer_index': layer.get('layer_index', 1),
                 'file_path': layer['file_path'],
-                'file_exists': os.path.exists(layer['file_path'])
+                'file_exists': os.path.exists(layer['file_path']),
+                'is_gif': layer['file_path'].lower().endswith('.gif')
             })
 
         return layer_info
