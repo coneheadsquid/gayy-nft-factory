@@ -2,7 +2,7 @@ import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                              QListWidgetItem, QLabel, QScrollArea, QSplitter)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtGui import QPixmap, QIcon, QMovie
 
 
 class GalleryPanel(QWidget):
@@ -11,6 +11,7 @@ class GalleryPanel(QWidget):
     def __init__(self, project_manager):
         super().__init__()
         self.project_manager = project_manager
+        self.current_movie = None  # Track current GIF movie
         self.init_ui()
 
     def init_ui(self):
@@ -82,6 +83,11 @@ class GalleryPanel(QWidget):
         """Refresh the gallery with all generated NFTs"""
         self.nft_list.clear()
 
+        # Stop any currently playing GIF
+        if self.current_movie:
+            self.current_movie.stop()
+            self.current_movie = None
+
         if not self.project_manager.is_project_loaded():
             self.nft_info.setText("No project loaded")
             return
@@ -99,14 +105,34 @@ class GalleryPanel(QWidget):
             # Try to load thumbnail
             thumb_path = nft['image_path']
             if os.path.exists(thumb_path):
-                pixmap = QPixmap(thumb_path)
-                if not pixmap.isNull():
-                    # Create thumbnail (50x50)
-                    thumb = pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio,
-                                          Qt.TransformationMode.SmoothTransformation)
-                    # Convert QPixmap to QIcon
-                    icon = QIcon(thumb)
-                    item.setIcon(icon)
+                if thumb_path.lower().endswith('.gif'):
+                    # For GIFs, use first frame as thumbnail
+                    try:
+                        from PIL import Image
+                        gif = Image.open(thumb_path)
+                        gif.seek(0)
+                        thumb = gif.copy()
+                        thumb = thumb.convert('RGBA')
+                        # Create thumbnail (50x50)
+                        thumb = thumb.resize((50, 50), Image.Resampling.LANCZOS)
+                        # Convert PIL Image to QPixmap
+                        from PIL.ImageQt import ImageQt
+                        qim = ImageQt(thumb)
+                        pixmap = QPixmap.fromImage(qim)
+                        icon = QIcon(pixmap)
+                        item.setIcon(icon)
+                    except Exception as e:
+                        print(f"Error creating GIF thumbnail: {e}")
+                else:
+                    # For PNGs
+                    pixmap = QPixmap(thumb_path)
+                    if not pixmap.isNull():
+                        # Create thumbnail (50x50)
+                        thumb = pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
+                        # Convert QPixmap to QIcon
+                        icon = QIcon(thumb)
+                        item.setIcon(icon)
 
             self.nft_list.addItem(item)
 
@@ -132,17 +158,31 @@ class GalleryPanel(QWidget):
         image_path = nft_data['image_path']
         metadata = nft_data['metadata']
 
+        # Stop any currently playing GIF
+        if self.current_movie:
+            self.current_movie.stop()
+            self.current_movie = None
+
         if os.path.exists(image_path):
-            pixmap = QPixmap(image_path)
-            if not pixmap.isNull():
-                # Scale to fit preview area while maintaining aspect ratio
-                scaled_pixmap = pixmap.scaled(380, 380, Qt.AspectRatioMode.KeepAspectRatio,
-                                              Qt.TransformationMode.SmoothTransformation)
-                self.large_preview.setPixmap(scaled_pixmap)
-                self.large_preview.setText("")  # Clear text when image is shown
+            if image_path.lower().endswith('.gif'):
+                # Handle GIF preview with animation
+                self.large_preview.setText("")  # Clear text
+                self.current_movie = QMovie(image_path)
+                self.current_movie.setScaledSize(self.large_preview.size())
+                self.large_preview.setMovie(self.current_movie)
+                self.current_movie.start()
             else:
-                self.large_preview.clear()
-                self.large_preview.setText("Failed to load image")
+                # Handle PNG preview
+                pixmap = QPixmap(image_path)
+                if not pixmap.isNull():
+                    # Scale to fit preview area while maintaining aspect ratio
+                    scaled_pixmap = pixmap.scaled(380, 380, Qt.AspectRatioMode.KeepAspectRatio,
+                                                  Qt.TransformationMode.SmoothTransformation)
+                    self.large_preview.setPixmap(scaled_pixmap)
+                    self.large_preview.setText("")  # Clear text when image is shown
+                else:
+                    self.large_preview.clear()
+                    self.large_preview.setText("Failed to load image")
         else:
             self.large_preview.clear()
             self.large_preview.setText("Image file not found")
@@ -150,6 +190,7 @@ class GalleryPanel(QWidget):
         # Show NFT info
         info_text = f"Edition: #{nft_data['edition']}\n"
         info_text += f"Name: {metadata.get('name', 'Unknown')}\n"
+        info_text += f"File Type: {'GIF' if image_path.lower().endswith('.gif') else 'PNG'}\n"
         info_text += f"Attributes: {len(metadata.get('attributes', []))} traits\n"
 
         # Add attributes
@@ -157,6 +198,13 @@ class GalleryPanel(QWidget):
         if attributes:
             info_text += "\nTraits:\n"
             for attr in attributes:
-                info_text += f"• {attr.get('trait_type', 'Unknown')}: {attr.get('value', 'Unknown')}\n"
+                file_type = attr.get('file_type', 'png')
+                info_text += f"• {attr.get('trait_type', 'Unknown')}: {attr.get('value', 'Unknown')} ({file_type})\n"
 
         self.nft_info.setText(info_text)
+
+    def resizeEvent(self, event):
+        """Handle resize events to adjust GIF size"""
+        super().resizeEvent(event)
+        if self.current_movie:
+            self.current_movie.setScaledSize(self.large_preview.size())

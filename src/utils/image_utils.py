@@ -1,15 +1,28 @@
 from PIL import Image, ImageChops
+import os
 
 
 def compose_layers(layer_composition):
     """
-    Compose multiple layers into a single image based on z-index order
+    Compose multiple layers into a single image or GIF based on z-index order
     All images are resized to 2000x2000px to ensure compatibility
     """
     if not layer_composition:
         # Return transparent canvas if no layers
         return Image.new('RGBA', (2000, 2000), (0, 0, 0, 0))
 
+    # Check if any layer is a GIF
+    gif_layers = [layer for layer in layer_composition if layer['file_path'].lower().endswith('.gif')]
+
+    if gif_layers:
+        frames, durations = compose_gif_layers(layer_composition, gif_layers)
+        return frames, durations
+    else:
+        return compose_static_layers(layer_composition)
+
+
+def compose_static_layers(layer_composition):
+    """Compose static PNG layers"""
     # Sort by z-index (lowest first)
     sorted_layers = sorted(layer_composition, key=lambda x: x['z_index'])
 
@@ -22,6 +35,102 @@ def compose_layers(layer_composition):
         canvas = apply_blend_mode(canvas, layer_image, layer_config)
 
     return canvas
+
+
+def compose_gif_layers(layer_composition, gif_layers):
+    """
+    Compose layers where at least one is a GIF
+    All output frames will be GIFs with the same number of frames as the longest GIF
+    """
+    # Find the maximum number of frames among all GIF layers
+    max_frames = 1
+    gif_data = {}
+
+    for layer in gif_layers:
+        try:
+            gif = Image.open(layer['file_path'])
+            frames = 0
+            while True:
+                frames += 1
+                try:
+                    gif.seek(frames)
+                except EOFError:
+                    break
+            max_frames = max(max_frames, frames)
+            gif_data[layer['file_path']] = frames
+        except Exception as e:
+            print(f"Error reading GIF {layer['file_path']}: {e}")
+            gif_data[layer['file_path']] = 1
+
+    # Sort all layers by z-index
+    sorted_layers = sorted(layer_composition, key=lambda x: x['z_index'])
+
+    # Create frames
+    frames = []
+    durations = []
+
+    for frame_num in range(max_frames):
+        # Start with transparent canvas for this frame
+        canvas = Image.new('RGBA', (2000, 2000), (0, 0, 0, 0))
+
+        for layer_config in sorted_layers:
+            layer_image = load_and_prepare_layer_for_frame(layer_config, frame_num, max_frames)
+            if layer_image:
+                canvas = apply_blend_mode(canvas, layer_image, layer_config)
+
+        frames.append(canvas)
+        # Use a default duration of 100ms for GIFs
+        durations.append(100)
+
+    return frames, durations
+
+
+def load_and_prepare_layer_for_frame(layer_config, frame_num, max_frames):
+    """Load appropriate frame for GIF layers, or static image for PNG layers"""
+    file_path = layer_config['file_path']
+
+    if file_path.lower().endswith('.gif'):
+        return load_gif_frame(layer_config, frame_num, max_frames)
+    else:
+        return load_and_prepare_layer(layer_config)
+
+
+def load_gif_frame(layer_config, frame_num, max_frames):
+    """Load specific frame from GIF, handling looping for shorter GIFs"""
+    try:
+        gif = Image.open(layer_config['file_path'])
+
+        # Get total frames in this GIF
+        total_frames = 0
+        while True:
+            total_frames += 1
+            try:
+                gif.seek(total_frames)
+            except EOFError:
+                break
+
+        # Calculate which frame to use (loop if necessary)
+        frame_to_use = frame_num % total_frames
+
+        # Seek to the appropriate frame
+        gif.seek(frame_to_use)
+        frame = gif.convert('RGBA')
+
+        # Resize to 2000x2000
+        frame = resize_image_to_2000x2000(frame)
+
+        # Apply opacity
+        opacity = layer_config.get('opacity', 1.0)
+        if opacity < 1.0:
+            alpha = frame.split()[3]
+            alpha = alpha.point(lambda p: p * opacity)
+            frame.putalpha(alpha)
+
+        return frame
+
+    except Exception as e:
+        print(f"Error loading GIF frame {layer_config['file_path']}: {e}")
+        return Image.new('RGBA', (2000, 2000), (0, 0, 0, 0))
 
 
 def load_and_prepare_layer(layer_config):
@@ -144,3 +253,23 @@ def overlay_blend(background, foreground):
     result.putdata(final_data)
 
     return result
+
+
+def get_gif_frame_count(file_path):
+    """Get number of frames in a GIF file"""
+    try:
+        if file_path.lower().endswith('.gif'):
+            gif = Image.open(file_path)
+            frame_count = 0
+            while True:
+                frame_count += 1
+                try:
+                    gif.seek(frame_count)
+                except EOFError:
+                    break
+            return frame_count
+        else:
+            return 1
+    except Exception as e:
+        print(f"Error getting GIF frame count for {file_path}: {e}")
+        return 1

@@ -184,7 +184,7 @@ class ArtistPanel(QWidget):
         artist_name = display_text.split(' (')[0]  # Remove layer count from display
 
         files, _ = QFileDialog.getOpenFileNames(
-            self, f"Select Layer Images for {artist_name}", "", "Images (*.png *.jpg *.jpeg)"
+            self, f"Select Layer Images for {artist_name}", "", "Images (*.png *.jpg *.jpeg *.gif)"
         )
 
         if files:
